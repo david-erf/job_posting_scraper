@@ -2,13 +2,9 @@ import time
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
-import re
 import pandas as pd
 from datetime import date
 today = date.today()
-
-
-
 
 def get_jobs_for_keyword(keyword, pages=10,pause=2):
     """
@@ -168,117 +164,19 @@ abbreviation_mapping = {
 
 }
 
-# Job Categories and Associated Keywords
-job_categories = {
-    'engineering_it': [
-        'engineer',
-        'engineering',
-        'software',
-        'developer',
-        'information technology',
-        'technical',
-        'it consultant',
-        'data analytics',
-        'data science',
-        'data engineering',
-    ],
-    'legal': [
-        'legal',
-        'counsel',
-        'compliance',
-        'legal advisor',
-        'fair lending',
-        'paralegal',
-        'lawyer',
-        'employment law',
-        'data protection',
-        'regulatory compliance',
-        'regulatory law'
-    ],
-    'operations_cs': [
-        'fraud investigator',
-        'fraud strategist',
-        'processor',
-        'business control',
-        'product support specialist',
-        'client service',
-        'quality',
-        'agent',
-        'support',
-        'strategy'
-    ],
-    'sales': [
-        'account executive',
-        'sales',
-        'sales development representative',
-        'account management',
-        'lead generation'
-    ],
-    'marketing': [
-        'marketing',
-        'brand management',
-        'loyalty',
-        'rewards',
-        'search engine',
-        'campaign performance',
-        'direct mail',
-        'email marketing'
-        'social media',
-        'seo'
-    ],
-    'hr_admin': [
-        'compensation',
-        'talent acquisition',
-        'human',
-        'benefits',
-        'payroll specialist',
-        'diversity',
-        'inclusion',
-        'administrative'
-    ],
-    'product_rnd': [
-        'product development',
-        'product manager',
-        'research',
-        'development'
-    ],
-    'gen_ai': [
-        'generative ai',
-        'gen ai',
-        'large language model',
-        'llms',
-        'openai',
-        'artificial intelligence',
-        'chatgpt',
-    ],
-    'finance': [
-        'underwrit',
-        'accounting',
-        'accountant',
-        'financial reporting',
-        'treasury',
-        'financial advisor',
-        'trader',
-        'financial services',
-        'financial analyst',
-        'valuation',
-        'investment banking'
-    ]
-}
-
-companies = ['SoFi','PayPal','Plaid','Salesforce','Affirm','Chime','Venmo','Upstart''Stripe','Wealthfront','Argyle','Square','Square']
+keywords = ['data science','SoFi','PayPal','Plaid','Salesforce','Affirm','Chime','Venmo','Upstart','Stripe','Wealthfront','Argyle','Square','Square','data science','data analyst','data manager','analyst','data engineer','fintech startup','credit analytics','product analytics','analytics']
 results={}
 ct=0
-for c in companies:
+for k in keywords:
   ct+=1
-  print(c,ct,len(companies))
-  results[c]=get_jobs_for_keyword(c, pages=10)
+  print(k,ct,len(keywords))
+  results[k]=get_jobs_for_keyword(k, pages=10)
 
 l=[]
-for c in results.keys():
-  df = pd.DataFrame(results[c])
-  df['searched_company']= c
+for k in results.keys():
+  df = pd.DataFrame(results[k])
+  df['searched_keyword']= k
   l.append(df)
 results_df = pd.concat(l,axis=0)
 
-results_df.to_csv(f'./data/job_search_results_{today}.csv')
+results_df.to_csv(f'../data/job_search_results_{today}.csv')

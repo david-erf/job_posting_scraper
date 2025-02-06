@@ -5,47 +5,65 @@ today = date.today()
 import requests
 import pickle
 from agent import rank_job_posting,resume
+from bs4 import BeautifulSoup
+import re
 
-results_df=pd.read_csv('../data/job_search_results_2025-02-05.csv')
+from dotenv import load_dotenv
+import os
+
+load_dotenv()  # Loads .env variables into environment
+resume_path = os.getenv("RESUME_PATH")  # Now accessible like an env var
+
+with open(resume_path, "r") as file:
+    resume = file.read()
+
+
+results_df=pd.read_csv('../data/job_search_results_2025-02-06.csv')
 
 results_df['company'].fillna('', inplace=True)
 
-results_df['exact_match'] = [
-    company.lower().__contains__(search.lower())
-    for company, search in zip(results_df['company'], results_df['searched_company'])
-]
-
-matched_results_df = results_df[results_df['exact_match']].copy()
-
-print(results_df.shape)
-print(matched_results_df.shape)
-
-print(matched_results_df[matched_results_df.duplicated(subset=['title','company','searched_company','job_url'], keep=False)].shape)
-print(matched_results_df[matched_results_df.duplicated(subset=['job_url'], keep=False)].shape)
+# print(results_df.shape)
+# print(results_df.shape)
+# print(results_df[results_df.duplicated(subset=['title','company','searched_company','job_url'], keep=False)].shape)
+# print(results_df[results_df.duplicated(subset=['job_url'], keep=False)].shape)
 
 # check uniqueness
-matched_results_df.drop_duplicates(subset=['title','company','searched_company','job_url'], inplace=True)
-print(matched_results_df.shape)
+results_df.drop_duplicates(subset=['title','company','searched_keyword','job_url'], inplace=True)
+# print(results_df.shape)
 
-matched_results_df['title_relevance'] = matched_results_df['title'].apply(lambda x: rank_job_posting(resume, x))
+results_df['title_relevance'] = results_df['title'].apply(lambda x: rank_job_posting(resume, x))
+results_df.to_csv(f'../data/job_search_title_relevance_{today}.csv')
 
-matched_results_df.to_csv(f'../data/job_search_title_relevance_{today}')
+# to do: if not rerun
+results_df = pd.read_csv(f'../data/job_search_title_relevance_{today}.csv')
 
-matched_results_df = matched_results_df[matched_results_df['title_relevance']>=4].copy()
+matched_results_df = results_df[results_df['title_relevance']>=4].copy()
 print('count of jobs',matched_results_df.shape)
 
 # Loop through all job IDs and pull back html content
-jobs = {}
+jobs_raw = {}
 ct=0
-for job_id,url in zip(matched_results_df['job_id'],matched_results_df['job_url']):
+for job_id,url in list(zip(matched_results_df['job_id'],matched_results_df['job_url'])):
   print(url)
-  ct+=1
+  ct+=1 
   print(ct)
   time.sleep(2)
-  response = requests.get(url, timeout=5)
-  jobs[job_id] = {
-      'raw_response':response
-      }
+  try:
+    response = requests.get(url, timeout=5)
+  except:
+    response = 'failed to pull'
+  jobs_raw[job_id] = {
+        'raw_response':response
+        }
+
+# Save dictionary as a pickle file
+with open(f'../data/job_descriptions_raw_{today}.pkl', "wb") as file:
+    pickle.dump(jobs_raw, file)
+
+with open(f'../data/job_descriptions_raw_{today}.pkl', "rb") as file:
+    jobs = pickle.load(file)
+
+jobs=jobs_raw.copy()
 
 # Regular expression to find dollar amounts
 dollar_pattern = r'\$\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?'
@@ -55,7 +73,6 @@ ct=0
 for k in list(jobs.keys()):
   ct+=1
   print(ct)
-  clear_output(wait=True)  # Clear the previous output
   criteria = {}
   soup = BeautifulSoup(jobs[k]['raw_response'].content
     , "html.parser")
@@ -87,7 +104,7 @@ for k in list(jobs.keys()):
       value = item.find('span', class_='description__job-criteria-text').get_text(strip=True)
       criteria[header] = value
       jobs[k].update(criteria)
-      print( criteria)
+      # print( criteria)
 
   # Get Location Information
   og_title = soup.find('meta', property='og:title')
@@ -139,9 +156,6 @@ for k in list(jobs.keys()):
 
 
 
-# Save dictionary as a pickle file
-with open(f'../data/job_descriptions_{today}.pkl', "wb") as file:
-    pickle.dump(jobs, file)
 
 
 
