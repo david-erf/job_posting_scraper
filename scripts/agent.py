@@ -1,12 +1,5 @@
 import subprocess
-from dotenv import load_dotenv
-import os
 
-load_dotenv()  # Loads .env variables into environment
-resume_path = os.getenv("RESUME_PATH")  # Now accessible like an env var
-
-with open(resume_path, "r") as file:
-    resume = file.read()
 
 def call_ollama_run(model: str, prompt: str) -> str:
     """
