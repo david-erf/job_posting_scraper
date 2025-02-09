@@ -1,0 +1,232 @@
+import time
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import quote
+import re
+import pandas as pd
+from datetime import date
+today = date.today()
+import subprocess
+
+keywords = ['data science','data analytics','fintech','AI intern',"ML Intern"]
+
+
+def get_jobs_for_keyword(keyword, pages=10,pause=2):
+    """
+    Scrape job postings for a specific keyword.
+
+    Args:
+        keyword (str): The job title or keyword to search for.
+        pages (int): The number of pages to scrape.
+
+    Returns:
+        list: A list of dictionaries containing job details.
+    """
+    jobs = []
+    base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+
+    for page in range(pages):
+        print('.  ', page)
+        # Removed location from the URL
+        url = f"{base_url}?keywords={quote(keyword)}&start={25 * page}"
+        response = requests.get(url, timeout=5)
+
+        if response.status_code != 200:
+            print(f"Failed to fetch page {page + 1}: {response.status_code}")
+            continue
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        job_cards = soup.find_all('div', class_='base-search-card__info')
+
+        for card in job_cards:
+            title = card.find('h3').text.strip() if card.find('h3') else None
+            company = card.find('a', class_='hidden-nested-link').text.strip() if card.find('a', class_='hidden-nested-link') else None
+            # Removed the location extraction
+            if card.parent:
+              job_id = card.parent.get('data-entity-urn').split(':')[-1]
+              job_url = f"https://www.linkedin.com/jobs/view/{job_id}/"
+            else:
+              job_id = None
+              job_url = None
+
+            jobs.append({
+                'title': title,
+                'company': company,
+                'job_id':job_id,
+                'job_url': job_url,
+            })
+
+        time.sleep(pause)
+
+
+    return jobs
+
+def call_ollama_run(model: str, prompt: str) -> str:
+    """
+    Calls the Ollama CLI using the `run` command with a given prompt and returns the model's output.
+    
+    Parameters:
+        model (str): The name of the model to use (e.g., "mistral").
+        prompt (str): The prompt to send to the model.
+        
+    Returns:
+        str: The output from the model.
+    """
+    try:
+        result = subprocess.run(
+            ["ollama", "run", model],
+            input=prompt.encode("utf-8"),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+        return result.stdout.decode("utf-8").strip()
+    except subprocess.CalledProcessError as e:
+        error_message = e.stderr.decode("utf-8")
+        raise RuntimeError(f"Error calling Ollama: {error_message}")
+
+def rank_job_posting(resume: str, job_posting: str,lim:int = 2000) -> int:
+    """
+    Uses the Ollama CLI (with the Mistral model) to rank a job posting's relevance
+    to the given resume on a scale from 1 to 10.
+    
+    Parameters:
+        resume (str): The candidate's resume.
+        job_posting (str): The job posting description or title.
+        
+    Returns:
+        int: The relevance score.
+    """
+    resume=resume[0:lim]
+    job_posting=job_posting[0:lim]
+    
+
+    prompt = f"""You are a numeric AI job relevance scorer. For each input, output only a single number (from 1 to 10) on a single line, with no additional text, explanation, or formatting. The number represents the relevance of the job posting to the candidate's resume (10 means highly relevant, 1 means not relevant).
+
+    ### Resume:
+    {resume}
+
+    ### Job Posting:
+    {job_posting}
+
+    """
+    prompt=prompt[0:4000]
+    try:
+        response = call_ollama_run("mistral", prompt)
+        # Parse the response into an integer score
+        score = float(response.strip())
+    except Exception as e:
+        print(f"Error processing job posting: {job_posting}\nError: {e}")
+        score = 0
+
+    print(job_posting[:50], score)
+    return score
+
+def convert_to_days(date_posted):
+    """
+    Convert a human-readable time string (e.g., '1 week ago', '2 months ago')
+    into a float representing the number of days.
+    """
+    time_mapping = {
+        "minute": 1 / 1440,  # 1 minute = 1/1440 days
+        "hour": 1 / 24,      # 1 hour = 1/24 days
+        "day": 1,            # 1 day = 1 day
+        "week": 7,           # 1 week = 7 days
+        "month": 30.4,       # 1 month = 30.4 days (average)
+        "year": 365          # 1 year = 365 days
+    }
+
+    # Split the string into components
+    if date_posted:
+      parts = date_posted.split()
+
+      if len(parts) < 2:
+          return None  # Handle unexpected formats
+
+      try:
+          # Extract the number and time unit
+          number = float(parts[0])
+          unit = parts[1].rstrip('s')  # Remove plural (e.g., 'weeks' -> 'week')
+
+          # Convert to days
+          return number * time_mapping.get(unit, 1)
+      except (ValueError, KeyError):
+          return None  # Handle invalid cases gracefully
+
+def split_location(location, mapping):
+    """
+    Splits a location string into city and state.
+
+    Parameters:
+        location (str): The location string (e.g., "Chicago, IL" or "Greater San Francisco Area").
+        mapping (dict): A dictionary mapping special cases to (city, state) tuples.
+
+    Returns:
+        tuple: A tuple (city, state) with the split values.
+    """
+    if location in mapping:
+        return mapping[location]
+
+    # Split by comma for standard cases like "City, State"
+    if "," in location:
+        parts = location.split(",")
+        city = parts[0].strip()
+        state = parts[1].strip()
+
+        # Handle cases like "New York, United States"
+        if state.lower() == "united states":
+            state = abbreviation_mapping.get(city, "Unknown")  # The first part is actually the state in this subcase
+            city="Unknown"
+        return city, state
+
+    # Handle edge cases where location doesn't fit the standard pattern
+    return "Unknown", "Unknown"
+
+# Mappings to standardize location data for job postings
+mapping = {
+    'San Francisco Bay Area': ("San Francisco", "CA"),
+    'Greater Chicago Area':("Chicago","IL"),
+    'New York City Metropolitan Area': ("New York City", "NY"),
+    'Greater Wilmington Area': ("Wilmington", "DE"),
+    'Greater Sioux Falls Area': ("Sioux Falls", "SD"),
+    'Raleigh-Durham-Chapel Hill Area': ("Raleigh", "NC"),
+    'Buffalo-Niagara Falls Area': ("Buffalo", "NY"),
+    'Greater Hartford': ("Hartford", "CT"),
+    'Greater Boston': ("Boston", "MA"),
+    'Greater Houston': ("Houston", "TX"),
+    'Greater Reno Area': ("Reno", "NV"),
+    'Greater Scranton Area': ("Scranton", "PA"),
+    'Louisville Metropolitan Area': ("Louisville", "KY"),
+    'Kansas City Metropolitan Area': ("Kansas City", "MO"),
+    'Cincinnati Metropolitan Area': ("Cincinnati", "OH"),
+    'Omaha Metropolitan Area': ("Omaha", "NE"),
+    'Washington DC-Baltimore Area': ("Washington, DC", "DC"),
+    'Atlanta Metropolitan Area': ("Atlanta", "GA"),
+    'Greater Minneapolis-St. Paul Area': ("Minneapolis", "MN"),
+    'Los Angeles Metropolitan Area': ("Los Angeles", "CA"),
+    'Miami-Fort Lauderdale Area': ("Miami", "FL"),
+    'Utica-Rome Area': ("Utica", "NY"),
+    'Greater Cleveland': ("Cleveland", "OH"),
+    'Las Vegas Metropolitan Area': ("Las Vegas", "NV"),
+    'Albany, New York Metropolitan Area':("Albany","NY"),
+    'Columbus, Ohio Metropolitan Area':("Columbus","OH"),
+}
+
+# Additional Mappings to standardize location data for job postings
+
+abbreviation_mapping = {
+    "Wisconsin": "WI",
+    "Virginia": "VA",
+    "New Jersey": "NJ",
+    "Illinois": "IL",
+    "Hawaii": "HI",
+    "California": "CA",
+    "Washington": "WA",
+    "Texas": "TX",
+    "Florida": "FL",
+    "Arizona": "AZ",
+    "Colorado": "CO",
+    "Missouri": "MO",
+    "New York": "NY",
+
+}
