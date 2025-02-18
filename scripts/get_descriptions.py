@@ -49,7 +49,7 @@ results_df.drop_duplicates(subset=['title','company','searched_keyword','job_url
 results_df['title_relevance'] = results_df['title'].apply(lambda x: rank_job_posting(resume, x))
 results_df.to_csv(f'../data/job_search_title_relevance_{today}.csv')
 
-
+  
 # to do: if not rerun
 # results_df = pd.read_csv(f'../data/job_search_title_relevance_{today}.csv')
 
@@ -67,7 +67,7 @@ for job_id,url in list(zip(matched_results_df['job_id'],matched_results_df['job_
   print(ct)
   time.sleep(2)
   try:
-    response = requests.get(url, timeout=5)
+    response = requests.get(url, timeout=20)
   except:
     response = 'failed to pull'
   jobs_raw[job_id] = {
