@@ -9,6 +9,26 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(me
 
 DB_FILE = '../data/linkedin.db'
 
+conn = sqlite3.connect("../data/linkedin.db")
+cursor = conn.cursor()
+# Create table if it doesn't exist
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS jobs (
+        job_id TEXT PRIMARY KEY,
+        created_at TIMESTAMP, 
+        title TEXT,
+        company TEXT,
+        location TEXT,
+        description TEXT,
+        date_posted TEXT,
+        hiring_status TEXT,
+        searched_keyword TEXT,
+        title_relevance TEXT
+    )
+""")
+conn.commit()
+conn.close()
+
 
 q= ''' 
 select date(created_at),
@@ -39,7 +59,6 @@ select date(created_at),
 
 
 
-
 def query_database_to_df(db_path, query):
     try:
         # Connect to the SQLite database with a timeout of 10 seconds
@@ -57,12 +76,3 @@ def query_database_to_df(db_path, query):
     except Exception as e:
         logging.error("An error occurred: %s", e)
         sys.exit(1)
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: {} <database_path> <query>".format(sys.argv[0]))
-        sys.exit(1)
-    
-    db_path = sys.argv[1]
-    query = sys.argv[2]
-    query_database(db_path, query)
