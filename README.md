@@ -1,7 +1,6 @@
 # Job Posting Scraper & AI Relevance Analyzer
 
-A modular pipeline that automates the process of scraping job postings from LinkedIn, extracting full job descriptions, and using a cutting-edge LLM (via ollama/mistral) to score job relevance based on a candidate’s resume. This project highlights creative problem solving, resourcefulness, and technical prowess in both data processing and LLM integration.
-
+A modular pipeline for automating job searches by scraping postings from LinkedIn, extracting full job descriptions, and leveraging an LLM (via ollama/mistral) to assess relevance based on a candidate’s resume. The system streamlines data collection and filtering, making it easier to identify high-priority opportunities.
 ## Overview
 
 This project automates the process of:
