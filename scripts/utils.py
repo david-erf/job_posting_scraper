@@ -4,11 +4,15 @@ from bs4 import BeautifulSoup
 from urllib.parse import quote
 import re
 import pandas as pd
-from datetime import date
+from datetime import date,datetime
 today = date.today()
 import subprocess
+import sqlite3
+import logging
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-keywords = ['data science','data analytics','fintech','AI intern',"ML Intern","Salesforce",'Salesforce AI']
+
+keywords = ['data science','data analytics','fintech','AI intern',"ML Intern","Salesforce",'Salesforce AI','business intelligence']
 
 
 def get_jobs_for_keyword(keyword, pages=10,pause=2):
@@ -24,11 +28,12 @@ def get_jobs_for_keyword(keyword, pages=10,pause=2):
     """
     jobs = []
     base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+    geoid=102095887 # california
 
     for page in range(pages):
         print('.  ', page)
         # Removed location from the URL
-        url = f"{base_url}?keywords={quote(keyword)}&start={25 * page}"
+        url = f"{base_url}?geoId={geoid}&keywords={quote(keyword)}&start={25 * page}"
         response = requests.get(url, timeout=5)
 
         if response.status_code != 200:
@@ -69,6 +74,8 @@ def get_jobs_for_keyword(keyword, pages=10,pause=2):
             'job_id': job_id,
             'job_url': job_url,
             'hiring_status':hiring_status,
+            'created_at': datetime.utcnow().isoformat()  # Assign the same timestamp for all jobs in this request
+
             })
 
         time.sleep(pause)
@@ -251,7 +258,7 @@ def parse_job_id(job_id,url,resume):
     dollar_pattern = r'\$\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?'
 
     try:
-        response = requests.get(url, timeout=20)
+        response = requests.get(url)
     except:
         response = 'failed to pull'
 
@@ -321,14 +328,17 @@ def parse_job_id(job_id,url,resume):
         # todo
         if len(dollar_amounts)>0:
           max_salary=max(dollar_amounts) # should be safe
-          min_salary=min([s for s in dollar_amounts if s>max_salary*.1]) # but handle cases where annualized income and hourly are intermingled (prefer annualized)
-
-          # handle likely data integrity issues
-          # todo: replace with configurable variable
-          if min_salary>500000:
-            min_salary=None
           if max_salary>500000:
             max_salary=None
+          safe_min = [s for s in dollar_amounts if s>max_salary*.1]
+          if safe_min:
+            min_salary=min(safe_min) # but handle cases where annualized income and hourly are intermingled (prefer annualized)
+              # todo: replace with configurable variable
+            if min_salary>500000:
+              min_salary=None
+          else:
+            min_salary=None
+          # handle likely data integrity issues
           ans.update({'min_salary':min_salary,
                           'max_salary':max_salary})
     # except:
@@ -365,3 +375,88 @@ def write_cover_letter(resume: str, job_posting: str,lim:int = 2000) -> int:
         print(f"Error processing job posting: {job_posting}\nError: {e}")
 
     return response
+
+
+
+def compare_job_files(old_file, new_file, id_column="job_id"):
+    # Load CSV files
+    old_df = pd.read_csv(old_file)
+    new_df = pd.read_csv(new_file)
+
+    # Convert job IDs to sets for comparison
+    old_jobs = set(old_df[id_column])
+    new_jobs = set(new_df[id_column])
+
+    # Find overlap and differences
+    common_jobs = old_jobs & new_jobs
+    new_only_jobs = new_jobs - old_jobs
+    dropped_jobs = old_jobs - new_jobs
+
+    # Summary report
+    summary = {
+        "Total Jobs in Old File": len(old_jobs),
+        "Total Jobs in New File": len(new_jobs),
+        "Common Jobs": len(common_jobs),
+        "New Jobs Since Last Run": len(new_only_jobs),
+        "Dropped Jobs": len(dropped_jobs),
+    }
+
+    print("\n=== Job Comparison Summary ===")
+    for key, value in summary.items():
+        print(f"{key}: {value}")
+
+    return new_only_jobs, dropped_jobs  # Returns sets of new and dropped job IDs
+
+
+def job_exists(job_id, conn):
+    """Check if a job_id already exists in the database."""
+    cursor = conn.cursor()
+    cursor.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,))
+    return cursor.fetchone() is not None  # Returns True if job_id exists
+
+
+def insert_new_jobs(csv_file):
+    DB_FILE = '../data/linkedin.db'
+    """Insert new jobs from CSV, skipping existing job_ids."""
+    conn = sqlite3.connect(DB_FILE,timeout=30)
+    df = pd.read_csv(csv_file, dtype=str)  # Read all data as text
+
+    # Configure logging
+    logging.basicConfig(level=logging.DEBUG)
+
+    # Check if 'created_at' column exists, otherwise add a default timestamp
+    for k in ["created_at",'hiring_status','location','date_posted']:
+        if k not in df.columns:
+            df[k] = None  # Assign the same timestamp for all missing records
+
+
+    new_jobs = []
+    total_rows = len(df)
+    skipped = 0
+    seen_job_ids = set()  # Track job_ids processed in this CSV
+
+    for _, row in df.iterrows():
+        if row['job_id'] in seen_job_ids or job_exists(row['job_id'], conn):
+            skipped += 1
+        else:
+            seen_job_ids.add(row['job_id'])
+            new_jobs.append((row['job_id'],row['created_at'],row['title'],row['company'],row['location'],row['date_posted'],row['hiring_status'],row['searched_keyword'],row['title_relevance'],))
+
+    if new_jobs:
+        cursor = conn.cursor()
+        cursor.executemany("""
+            INSERT INTO jobs (job_id, created_at, title, company, location, date_posted, hiring_status, searched_keyword, title_relevance)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, new_jobs)
+        conn.commit()
+        logging.info(f"Inserted {len(new_jobs)} new jobs, skipped {skipped} duplicates (total {total_rows} rows).")
+    else:
+        logging.info(f"No new jobs inserted. Skipped {skipped} duplicates out of {total_rows} rows.")
+
+    conn.close()
+
+# for f in ['../data/job_search_title_relevance_2025-02-08.csv','../data/job_search_title_relevance_2025-02-18.csv','../data/job_search_title_relevance_2025-02-19.csv','../data/job_search_title_relevance_2025-02-19_19-13-47.csv','../data/job_search_title_relevance_2025-02-20_13-13-05.csv','../data/job_search_title_relevance_2025-02-20_13-28-20.csv','../data/job_search_title_relevance_2025-02-20_13-37-30.csv',]:    
+#     print(f)
+#     insert_new_jobs(f)
+#     print('success, sleeping')
+#     time.sleep(10)    

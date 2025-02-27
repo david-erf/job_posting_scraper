@@ -5,7 +5,7 @@ today = date.today()
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 import requests
 import pickle
-from utils import get_jobs_for_keyword,convert_to_days,split_location,mapping,abbreviation_mapping,rank_job_posting,keywords,parse_job_id
+from utils import get_jobs_for_keyword,convert_to_days,split_location,mapping,abbreviation_mapping,rank_job_posting,keywords,parse_job_id,job_exists,insert_new_jobs
 from bs4 import BeautifulSoup
 import re
 from dotenv import load_dotenv
@@ -19,7 +19,7 @@ with open(resume_path, "r") as file:
     resume = file.read()
     resume = resume + ", ".join(keywords)
 
-# Get JOb Descriptions for keywords 
+# Get Job Cards for keywords 
 results={}
 ct=0
 for k in keywords:
@@ -49,6 +49,8 @@ results_df['company'].fillna('', inplace=True)
 results_df.drop_duplicates(subset=['title','company','searched_keyword','job_url'], inplace=True)
 results_df['title_relevance'] = results_df['title'].apply(lambda x: rank_job_posting(resume, x))
 results_df.to_csv(f'../data/job_search_title_relevance_{timestamp}.csv')
+
+insert_new_jobs(f'../data/job_search_title_relevance_{timestamp}.csv')
 
   
 # # to do: if not rerun
