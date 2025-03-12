@@ -24,11 +24,8 @@ from bs4 import BeautifulSoup
 # Set logging level for requests' underlying libraries
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-# Define keywords for job search
-keywords: List[str] = [
-    'data science', 'data analytics', 'fintech', 'AI intern',
-    "ML Intern", "Salesforce", 'Salesforce AI', 'business intelligence'
-]
+# Keywords are now loaded from environment variable or specified on command line
+# No hardcoded defaults here
 
 def get_jobs_for_keyword(keyword: str, pages: int = 10, pause: int = 2) -> List[Dict[str, Any]]:
     """
@@ -395,10 +392,15 @@ def parse_job_id(job_id: str, url: str, resume: str, extract_html: bool = False)
                 dollar_amounts = [float(s.replace("$", "").replace(",", "")) for s in dollar_amounts]
                 if dollar_amounts:
                     max_salary = max(dollar_amounts)
-                    if max_salary > 500000:
+                    if max_salary > 500000:  # Likely not a real salary
                         max_salary = None
-                    safe_min = [s for s in dollar_amounts if s > (max_salary * 0.1) if max_salary]
-                    min_salary = min(safe_min) if safe_min else None
+                    
+                    # Only calculate min_salary if max_salary is valid
+                    min_salary = None
+                    if max_salary is not None:
+                        safe_min = [s for s in dollar_amounts if s > (max_salary * 0.1)]
+                        min_salary = min(safe_min) if safe_min else None
+                    
                     ans.update({
                         'min_salary': min_salary,
                         'max_salary': max_salary

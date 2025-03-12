@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: This script has been moved to src/reports/recent_jobs.py with enhanced functionality.
+
 Query recent job postings that are either:
 - Early applications or recently posted (hours ago)
 AND
 - High relevance (>7) or internship positions
 """
 
+import sys
+import os
 import pandas as pd
-from db import db
 import logging
+from db import db
 
 # Set pandas display options for better readability
 pd.set_option('display.max_columns', None)
@@ -16,6 +20,17 @@ pd.set_option('display.width', None)
 pd.set_option('display.max_colwidth', 40)  # Truncate long text fields
 
 def get_recent_relevant_jobs():
+    """
+    DEPRECATED: Use src/reports/recent_jobs.py instead.
+    This function will be removed in a future version.
+    """
+    print("=" * 80)
+    print("DEPRECATION WARNING: This script has been moved to src/reports/recent_jobs.py")
+    print("Please use the new location with enhanced functionality:")
+    print("python src/reports/recent_jobs.py [options]")
+    print("=" * 80)
+    print("\nContinuing with limited functionality for backward compatibility...\n")
+    
     query = """
     SELECT 
         r.job_id,
@@ -89,4 +104,12 @@ def get_recent_relevant_jobs():
         print(f"{idx}. {job_id}: {url}")
 
 if __name__ == "__main__":
+    # Add deprecation warning and path redirect
+    script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    new_script = os.path.join(script_dir, "src", "reports", "recent_jobs.py")
+    
+    print("\nDEPRECATED: This script has been moved to:")
+    print(f"  {new_script}")
+    print("Please use the new location for enhanced functionality and future updates.\n")
+    
     get_recent_relevant_jobs() 
